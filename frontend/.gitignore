@@ -1,50 +1,24 @@
-# === Variables de entorno ===
-.env
-*.env
-
-# === Python (FastAPI) ===
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.sqlite3
-*.db
-.Python
-venv/
-.venv/
-env/
-ENV/
-.venv.bak/
-*.egg
-*.egg-info/
-dist/
-build/
-
-# === Node.js (React) ===
-node_modules/
+# Logs
+logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
-.pnpm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# === Compilación frontend ===
-build/
-dist/
-.cache/
-.next/
-out/
-*.tsbuildinfo
+node_modules
+dist
+dist-ssr
+*.local
 
-# === Sistemas operativos ===
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-Thumbs.db
-
-# === IDEs y editores ===
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# === Otros ===
-*.log
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
