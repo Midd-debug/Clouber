@@ -1,7 +1,7 @@
 # main.py
 import os
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +33,7 @@ app = FastAPI(title="Clouber Nica Educativo")
 # --- CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir React frontend
+    allow_origins=["*"],  # React frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -105,20 +105,22 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-class User(BaseModel):
-    username: str
-    email: EmailStr
-    role: str
+class ChatQuestion(BaseModel):
+    question: str
 
 class TaskCreate(BaseModel):
     title: str
     description: str
     due_date: datetime
 
-class ChatQuestion(BaseModel):
-    question: str
+# --- Funciones ---
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-# --- Funciones util ---
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -140,7 +142,7 @@ def authenticate_user(db: Session, username: str, password: str):
         return False
     return user
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(lambda: SessionLocal())):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No autorizado",
@@ -149,46 +151,30 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        if username is None:
+        if not username:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = get_user(db, username=username)
-    if user is None:
+    user = get_user(db, username)
+    if not user:
         raise credentials_exception
     return user
 
 def build_openai_prompt(question: str) -> str:
     return f"""
-Eres un asistente educativo que responde preguntas de estudiantes nicaragüenses. Tu estilo es coloquial, cercano, como si hablaras con alguien en Nicaragua. Das respuestas claras pero no completas, para que la persona investigue más por su cuenta. Siempre ofreces al menos dos links o fuentes confiables para ampliar la información. El tema puede ser académico, ambiental o cultural, pero siempre ambientado en Nicaragua.
-
+Eres un asistente educativo nicaragüense. Responde de forma cercana y clara. Siempre ofrece al menos 2 links confiables para ampliar la información.
 Pregunta: {question}
-
 Respuesta:
 """
-
-# --- DB ---
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # --- Endpoints ---
 @app.post("/register/", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    existing_user = get_user(db, user.username)
-    if existing_user:
+    if get_user(db, user.username):
         raise HTTPException(status_code=400, detail=f"El usuario '{user.username}' ya existe")
     
     hashed_password = get_password_hash(user.password)
-    db_user = UserDB(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password,
-        role=user.role
-    )
+    db_user = UserDB(username=user.username, email=user.email, hashed_password=hashed_password, role=user.role)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -197,14 +183,21 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     if user.role.lower() == "estudiante" and user.teacher_username:
         teacher = get_user(db, user.teacher_username)
         if not teacher or teacher.role.lower() != "docente":
-            raise HTTPException(status_code=400, detail=f"Docente '{user.teacher_username}' no encontrado o inválido")
+            raise HTTPException(status_code=400, detail=f"Docente '{user.teacher_username}' inválido")
         assoc = StudentTeacher(teacher_id=teacher.id, student_id=db_user.id)
         db.add(assoc)
         db_user.teacher_id = teacher.id
         db.commit()
 
-    # Generar token como login
     access_token = create_access_token(data={"sub": db_user.username}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/token", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    access_token = create_access_token(data={"sub": user.username}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/chat/")
@@ -215,13 +208,12 @@ def chat_response(data: ChatQuestion, current_user: UserDB = Depends(get_current
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=250,
+            max_tokens=250
         )
         answer = completion.choices[0].message.content.strip()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al llamar a OpenAI: {e}")
 
-    # Guardar historial si es estudiante
     if current_user.role.lower() == "estudiante":
         chat_hist = ChatHistory(student_id=current_user.id, question=data.question, answer=answer)
         db.add(chat_hist)
@@ -229,72 +221,18 @@ def chat_response(data: ChatQuestion, current_user: UserDB = Depends(get_current
 
     return {"answer": answer}
 
-
-
-@app.post("/token", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
-    access_token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/chat/")
-def chat_response(data: ChatQuestion, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    prompt = build_openai_prompt(data.question)
-    try:
-        completion = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=250,
-        )
-        answer = completion.choices[0].message.content.strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al llamar a OpenAI: {e}")
-
-    if current_user.role == "estudiante":
-        chat_hist = ChatHistory(student_id=current_user.id, question=data.question, answer=answer)
-        db.add(chat_hist)
-        db.commit()
-
-    return {"answer": answer}
-
-@app.get("/docente/historial/{student_username}")
-def get_student_history(student_username: str, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != "docente":
-        raise HTTPException(status_code=403, detail="Solo docentes pueden acceder")
-    student = get_user(db, student_username)
-    if not student or student.role != "estudiante":
-        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    assoc = db.query(StudentTeacher).filter(
-        StudentTeacher.teacher_id == current_user.id,
-        StudentTeacher.student_id == student.id
-    ).first()
-    if not assoc:
-        raise HTTPException(status_code=403, detail="No tienes acceso a ese estudiante")
-    history = db.query(ChatHistory).filter(ChatHistory.student_id == student.id).order_by(ChatHistory.timestamp.desc()).all()
-    return [{"question": h.question, "answer": h.answer, "timestamp": h.timestamp} for h in history]
+@app.get("/tasks/")
+def get_tasks(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role.lower() != "estudiante":
+        raise HTTPException(status_code=403, detail="Solo estudiantes pueden ver tareas")
+    tasks = db.query(Task).filter(Task.student_id == current_user.id).all()
+    return [{"title": t.title, "description": t.description, "due_date": t.due_date} for t in tasks]
 
 @app.post("/tasks/")
 def add_task(task: TaskCreate, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != "estudiante":
+    if current_user.role.lower() != "estudiante":
         raise HTTPException(status_code=403, detail="Solo estudiantes pueden agregar tareas")
     task_db = Task(student_id=current_user.id, title=task.title, description=task.description, due_date=task.due_date)
     db.add(task_db)
     db.commit()
-    return {"msg": "Tarea agregada con éxito"}
-
-@app.get("/tasks/")
-def get_tasks(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != "estudiante":
-        raise HTTPException(status_code=403, detail="Solo estudiantes pueden ver sus tareas")
-    tasks = db.query(Task).filter(Task.student_id == current_user.id).all()
-    return [{"title": t.title, "description": t.description, "due_date": t.due_date} for t in tasks]
-
-@app.get("/")
-def root():
-    return {"msg": "¡Qué onda, mi gente! Bienvenidos a Clouber Nica Educativo!"}
+    return {"msg": "Tarea agregada"}

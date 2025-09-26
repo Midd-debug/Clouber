@@ -1,116 +1,259 @@
-body {
+/* ===========================
+   GLOBAL STYLES
+=========================== */
+* {
   margin: 0;
-  font-family: 'Segoe UI', sans-serif;
-  background: #121212;
-  color: #fff;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.navbar {
-  background: #1a1a1a;
-  padding: 15px;
-  text-align: center;
-  font-weight: bold;
-  font-size: 1.5rem;
-  color: #4DA6FF;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+html, body, #root {
+  height: 100%;
+  width: 100%;
 }
 
-.main-container {
+body {
+  font-family: "Inter", sans-serif;
+  background-color: #121212; /* fondo oscuro general */
+  color: #e2e8f0;
+  min-height: 100vh;
   display: flex;
-  height: calc(100vh - 60px);
+  flex-direction: column;
 }
 
-.sidebar, .info-column {
-  width: 200px;
-  background: #1a1a1a;
-  padding: 15px;
-  border-right: 1px solid #333;
+a {
+  text-decoration: none;
+  color: inherit;
 }
 
-.info-column {
-  border-left: 1px solid #333;
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.2s ease;
 }
 
+input, select, textarea {
+  font-family: inherit;
+}
+
+/* ===========================
+   ROOT CONTAINER
+=========================== */
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* ===========================
+   NAVBAR
+=========================== */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #1f1f1f;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.navbar .logo {
+  height: 3rem;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.navbar .logo:hover {
+  transform: scale(1.1);
+}
+
+.navbar .nav-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.navbar .nav-links a {
+  color: #e2e8f0;
+  font-weight: 500;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.navbar .nav-links a:hover {
+  color: #4f46e5;
+  transform: scale(1.05);
+}
+
+/* ===========================
+   PAGE CONTENT
+=========================== */
+.page-content {
+  flex: 1; /* ocupa todo el espacio restante debajo del navbar */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 2rem;
+  width: 100%;
+  overflow-y: auto;
+}
+
+/* ===========================
+   BUTTONS
+=========================== */
+button.primary {
+  background-color: #4f46e5;
+  color: #fff;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+}
+
+button.primary:hover {
+  background-color: #6366f1;
+}
+
+/* ===========================
+   FORM STYLES (LOGIN / REGISTER)
+=========================== */
+.form-container {
+  width: 100%;
+  max-width: 400px;
+  margin: 2rem auto;
+  background-color: #1f1f1f;
+  padding: 2rem;
+  border-radius: 0.8rem;
+  box-shadow: 0 0 10px rgba(79, 70, 229, 0.3);
+}
+
+.form-container h2 {
+  margin-bottom: 1.5rem;
+  font-size: 1.8rem;
+  color: #fff;
+  text-align: center;
+}
+
+.form-container input {
+  width: 100%;
+  padding: 0.8rem;
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+  background-color: #2c2c2c;
+  border: 1px solid #333;
+  color: #e2e8f0;
+}
+
+.form-container input:focus {
+  border-color: #4f46e5;
+}
+
+/* ===========================
+   CHAT
+=========================== */
 .chat-container {
+  width: 100%;
+  max-width: 800px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 15px;
+  gap: 1rem;
+  margin: 2rem auto;
+  background-color: #1f1f1f;
+  border-radius: 1rem;
+  padding: 1rem;
 }
 
-.chat-history {
+.chat-messages {
   flex: 1;
   overflow-y: auto;
-  margin-bottom: 15px;
-}
-
-.chat-message {
-  padding: 12px;
-  border-radius: 15px;
-  margin-bottom: 10px;
-  max-width: 70%;
-  word-wrap: break-word;
-  font-size: 0.95rem;
-  transition: all 0.3s ease;
-}
-
-.chat-message.user {
-  background: #0d47a1;
-  align-self: flex-end;
-}
-
-.chat-message.bot {
-  background: #222;
-  align-self: flex-start;
-}
-
-.typing-cursor {
-  animation: blink 1s infinite;
-  margin-left: 2px;
-}
-
-@keyframes blink {
-  0%, 50%, 100% { opacity: 1; }
-  25%, 75% { opacity: 0; }
+  padding: 1rem;
+  background-color: #2c2c2c;
+  border-radius: 0.8rem;
 }
 
 .chat-input {
   display: flex;
+  gap: 0.5rem;
 }
 
 .chat-input input {
-  flex: 1;
-  padding: 12px;
-  border-radius: 10px 0 0 10px;
+  flex-grow: 1;
+  padding: 0.8rem;
+  border-radius: 0.5rem;
   border: 1px solid #333;
-  background: #1a1a1a;
-  color: #fff;
-  outline: none;
-  transition: border 0.3s;
-}
-
-.chat-input input:focus {
-  border-color: #4DA6FF;
+  background-color: #2c2c2c;
+  color: #e2e8f0;
 }
 
 .chat-input button {
-  padding: 0 20px;
-  border: none;
-  background: #4DA6FF;
+  background-color: #4f46e5;
   color: #fff;
-  border-radius: 0 10px 10px 0;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.2s ease;
+  padding: 0.8rem 1rem;
+  border-radius: 0.5rem;
 }
 
-.easter-egg {
-  padding: 12px;
-  margin-bottom: 15px;
-  background: #222;
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: center;
-  font-weight: bold;
-  transition: all 0.3s ease;
+.chat-input button:hover {
+  background-color: #6366f1;
+}
+
+/* ===========================
+   SCROLLBAR ESTILIZADA
+=========================== */
+.chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background-color: #4f46e5;
+  border-radius: 4px;
+}
+
+/* ===========================
+   ANIMACIONES SUAVES
+=========================== */
+.fade-in {
+  animation: fadeIn 0.4s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Chat premium additions */
+.scroll-fade {
+  position: relative;
+  scrollbar-width: thin;
+}
+.scroll-fade::-webkit-scrollbar { width: 8px; }
+.scroll-fade::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#4da6ff,#357abd); border-radius: 6px; }
+
+/* Blinking cursor para burbujas typing */
+.typing {
+  display: inline-block;
+  width: 10px;
+  margin-left: 6px;
+  background: linear-gradient(90deg,#cfe9ff,#7fb8ff);
+  height: 14px;
+  vertical-align: text-bottom;
+  animation: blink 1s steps(2,end) infinite;
+  border-radius: 2px;
+}
+@keyframes blink {
+  from { opacity: 1; }
+  50% { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* small fade in util */
+.fade-in { animation: fadeInShort .28s ease forwards; }
+@keyframes fadeInShort { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
+
+/* Ajustes responsivos */
+@media (max-width: 900px) {
+  .left-panel, .right-panel { display: none; }
+  /* deja solo chat central en móviles */
 }

@@ -1,38 +1,52 @@
 import React from "react";
-import { Box, Button, Flex, Text } from "@chakra-ui/react";
-import { Link, useLocation } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
-export default function Navbar({ onLogout }) {
-  const location = useLocation();
+export default function Navbar({ onLogout, isAuthenticated }) {
+  const navigate = useNavigate();
+
+  const handleLogoutClick = () => {
+    onLogout();
+    navigate("/login");
+  };
 
   return (
-    <Box bg="#1a1a1a" px={6} py={4} boxShadow="0 2px 10px rgba(0,0,0,0.5)">
-      <Flex justifyContent="space-between" alignItems="center">
-        <Text color="#4DA6FF" fontWeight="bold" fontSize="xl">
-          Clouber 🇳🇮
-        </Text>
-        <Flex gap={3}>
-          {location.pathname !== "/login" && location.pathname !== "/register" && (
-            <Button size="sm" colorScheme="red" onClick={onLogout}>
+    <nav className="navbar">
+      <div className="logo" onClick={() => navigate(isAuthenticated ? "/chat" : "/login")}>
+        Clouber
+      </div>
+
+      <div className="nav-links">
+        {!isAuthenticated && (
+          <>
+            <NavLink
+              to="/login"
+              className={({ isActive }) => (isActive ? "active-link" : "")}
+            >
+              Login
+            </NavLink>
+            <NavLink
+              to="/register"
+              className={({ isActive }) => (isActive ? "active-link" : "")}
+            >
+              Register
+            </NavLink>
+          </>
+        )}
+
+        {isAuthenticated && (
+          <>
+            <NavLink
+              to="/chat"
+              className={({ isActive }) => (isActive ? "active-link" : "")}
+            >
+              Chat
+            </NavLink>
+            <button className="primary" onClick={handleLogoutClick}>
               Logout
-            </Button>
-          )}
-          {location.pathname === "/login" && (
-            <Link to="/register">
-              <Button size="sm" colorScheme="blue">
-                Registro
-              </Button>
-            </Link>
-          )}
-          {location.pathname === "/register" && (
-            <Link to="/login">
-              <Button size="sm" colorScheme="blue">
-                Login
-              </Button>
-            </Link>
-          )}
-        </Flex>
-      </Flex>
-    </Box>
+            </button>
+          </>
+        )}
+      </div>
+    </nav>
   );
 }

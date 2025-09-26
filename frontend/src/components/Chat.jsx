@@ -1,23 +1,94 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Box, Button, Text } from "@chakra-ui/react";
-import { motion } from "framer-motion";
+import { Box, Button, Text, Input, IconButton, Tooltip } from "@chakra-ui/react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { FiTrash2, FiPlus, FiSave, FiClipboard } from "react-icons/fi";
 
-export default function Chat({ onLogout }) {
-  const [messages, setMessages] = useState([
-    { text: "¡Hola! Soy tu tutor educativo.", user: false },
-  ]);
+// Componente de puntos de escritura para IA
+const TypingDots = () => (
+  <Box display="flex" gap="2px">
+    {[".", ".", "."].map((d, i) => (
+      <motion.div
+        key={i}
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: "#fff",
+        }}
+        animate={{ y: [0, -4, 0] }}
+        transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.2 }}
+      />
+    ))}
+  </Box>
+);
+
+export default function Chat() {
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState([{ text: "¡Hola! Soy tu tutor educativo.", user: false }]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [summary, setSummary] = useState("");
+  const [chats, setChats] = useState([]);
+  const [currentChat, setCurrentChat] = useState("");
   const chatEndRef = useRef(null);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // Cargar chats guardados
+  useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem("clouberChats") || "[]");
+    setChats(stored);
+    if (stored.length > 0) {
+      setCurrentChat(stored[0].name);
+      setMessages(stored[0].messages || []);
+    }
+  }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    localStorage.setItem("clouberChats", JSON.stringify(chats));
+  }, [chats]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    navigate("/");
+  };
+
+  const newChat = () => {
+    const name = prompt("Nombre del nuevo chat:");
+    if (!name) return;
+    const c = { name, messages: [{ text: "Nuevo chat — empieza a preguntar", user: false }], timestamp: new Date().toISOString() };
+    setChats((p) => [c, ...p]);
+    setCurrentChat(name);
+    setMessages(c.messages);
+  };
+
+  const saveChat = () => {
+    if (!currentChat) return newChat();
+    setChats((prev) =>
+      prev.map((c) => (c.name === currentChat ? { ...c, messages, timestamp: new Date().toISOString() } : c))
+    );
+  };
+
+  const deleteChat = (name) => {
+    if (!confirm(`Eliminar chat "${name}"?`)) return;
+    setChats((prev) => prev.filter((c) => c.name !== name));
+    if (currentChat === name) {
+      setCurrentChat("");
+      setMessages([{ text: "¡Hola! Soy tu tutor educativo.", user: false }]);
+    }
+  };
+
+  const loadChat = (name) => {
+    const chat = chats.find((c) => c.name === name);
+    if (!chat) return;
+    setMessages(chat.messages || []);
+    setCurrentChat(name);
+  };
+
+  const copyText = (text) => navigator.clipboard?.writeText(text);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -30,233 +101,209 @@ export default function Chat({ onLogout }) {
 
     try {
       const token = localStorage.getItem("token");
+      if (!token) return logout();
+
       const res = await fetch("http://localhost:8000/chat/", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + token 
-        },
-        body: JSON.stringify({ question: userMessage }), // <--- CORREGIDO
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ question: userMessage }),
       });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Error ${res.status}`);
+      }
+
       const data = await res.json();
+      const botText = data.answer || "No hubo respuesta.";
 
-      const botText = data.answer; // <--- CORREGIDO
-      let index = 0;
-      let displayedText = "";
-
+      let i = 0;
+      let displayed = "";
       const interval = setInterval(() => {
-        displayedText += botText[index];
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          if (newMessages.some((m) => m.user === false && m.typing)) {
-            newMessages[newMessages.length - 1] = { text: displayedText, user: false, typing: true };
-          } else {
-            newMessages.push({ text: displayedText, user: false, typing: true });
-          }
-          return newMessages;
-        });
-        index++;
-        if (index >= botText.length) {
+        if (i >= botText.length) {
           clearInterval(interval);
-          setMessages((prev) =>
-            prev.map((m) => (m.typing ? { ...m, typing: false } : m))
-          );
+          setMessages((prev) => prev.map((m) => (m.typing ? { ...m, typing: false } : m)));
           setIsTyping(false);
+          return;
         }
-      }, 20);
+        displayed += botText[i++];
+        setMessages((prev) => {
+          const copy = [...prev];
+          const lastTypingIndex = copy.findIndex((m) => m.typing);
+          if (lastTypingIndex >= 0) {
+            copy[lastTypingIndex] = { ...copy[lastTypingIndex], text: displayed };
+          } else {
+            copy.push({ text: displayed, user: false, typing: true });
+          }
+          return copy;
+        });
+      }, 12);
     } catch (err) {
-      setMessages((prev) => [...prev, { text: "Error al obtener respuesta 😓", user: false }]);
+      console.error(err);
+      setMessages((prev) => [...prev, { text: "Error al contactar el servidor.", user: false }]);
       setIsTyping(false);
     }
   };
 
   const generateSummary = async () => {
-    if (messages.length === 0) return;
+    if (!messages.length) return;
     setIsTyping(true);
     try {
       const token = localStorage.getItem("token");
       const res = await fetch("http://localhost:8000/chat/", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + token 
-        },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({
           question:
-            "Resume la siguiente conversación de forma clara y educativa:\n" +
+            "Resume la conversación de forma ordenada:\n" +
             messages.map((m) => `${m.user ? "Usuario:" : "Bot:"} ${m.text}`).join("\n"),
         }),
       });
       const data = await res.json();
-      setSummary(data.answer); // <--- CORREGIDO
-    } catch (err) {
-      setSummary("Error al generar resumen 😓");
+      setSummary(data.answer || "No hay resumen disponible.");
+    } catch {
+      setSummary("Error generando resumen.");
     } finally {
       setIsTyping(false);
     }
   };
 
+  const listVariant = { visible: { transition: { staggerChildren: 0.05 } } };
+  const itemVariant = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 } };
+
   return (
-    <Box bg="#121212" h="100vh" display="flex" flexDirection="column">
-      {/* Navbar */}
-      <Box
-        bg="#1a1a1a"
-        p={4}
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        boxShadow="0 2px 10px rgba(0,0,0,0.5)"
-      >
-        <Text color="#4DA6FF" fontWeight="bold" fontSize="xl">
-          Chat Clouber 🇳🇮
-        </Text>
-        <Button
-          size="sm"
-          colorScheme="red"
-          onClick={onLogout}
-        >
-          Logout
-        </Button>
+    <Box display="flex" flexDirection="column" h="100vh" bg="#0e0f13" color="#e9eef5" fontFamily="Inter, sans-serif">
+      {/* NAV */}
+      <Box bg="#0c0d11" p={3} display="flex" justifyContent="space-between" alignItems="center" borderBottom="1px solid #1c1e26">
+        <Text fontWeight="700" fontSize="lg" color="#6ea7ff">Clouber — Tutor</Text>
+        <Button size="sm" colorScheme="red" onClick={logout}>Salir</Button>
       </Box>
 
-      {/* Contenedor principal */}
       <Box display="flex" flex="1" overflow="hidden">
-        {/* Sidebar / Easter eggs */}
-        <Box
-          w="220px"
-          bg="#1a1a1a"
-          p={4}
-          borderRight="1px solid #333"
-          display="flex"
-          flexDirection="column"
-          gap={4}
-        >
-          {["🐦 Guardabarranco", "🌋 Volcán", "🌼 Sacuanjoche"].map((egg, idx) => (
-            <motion.div
-              key={idx}
-              className="easter-egg"
-              whileHover={{ scale: 1.2, rotate: 10 }}
-              whileTap={{ scale: 0.95 }}
-              style={{
-                padding: "10px",
-                borderRadius: "12px",
-                background: "#222",
-                textAlign: "center",
-                cursor: "pointer",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
-                color: "#fff",
-              }}
-            >
-              {egg}
-            </motion.div>
-          ))}
+        {/* LEFT */}
+        <Box w="260px" bg="#0c0d11" p={3} borderRight="1px solid #1c1e26" display="flex" flexDirection="column">
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+            <Text fontWeight="600" color="#9bb9ff">Chats</Text>
+            <Box>
+              <IconButton aria-label="new" icon={<FiPlus />} size="sm" onClick={newChat} mr={2} />
+              <IconButton aria-label="save" icon={<FiSave />} size="sm" onClick={saveChat} />
+            </Box>
+          </Box>
+          <Box flex="1" overflowY="auto" className="scroll-fade">
+            <AnimatePresence initial={false}>
+              {chats.map((c, idx) => (
+                <motion.div
+                  key={c.name + idx}
+                  layout
+                  variants={itemVariant}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  whileHover={{ scale: 1.02 }}
+                  style={{
+                    padding: "10px",
+                    borderRadius: "10px",
+                    marginBottom: "6px",
+                    cursor: "pointer",
+                    background: currentChat === c.name ? "#1c1e26" : "transparent",
+                    color: "#dfe9ff",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Box onClick={() => loadChat(c.name)}>
+                    <Text fontWeight="500">{c.name}</Text>
+                    <Text fontSize="xs" color="#7c89a3">{new Date(c.timestamp).toLocaleString()}</Text>
+                  </Box>
+                  <IconButton size="sm" icon={<FiTrash2 />} aria-label="delete" onClick={() => deleteChat(c.name)} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </Box>
         </Box>
 
-        {/* Chat central */}
-        <Box flex="1" display="flex" flexDirection="column" p={4} overflow="hidden">
-          <Box flex="1" overflowY="auto" mb={4} display="flex" flexDirection="column" gap={2}>
-            {messages.map((msg, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                style={{
-                  alignSelf: msg.user ? "flex-end" : "flex-start",
-                  background: msg.user ? "#0d47a1" : "#222",
-                  color: "#fff",
-                  padding: "12px 16px",
-                  borderRadius: "18px",
-                  maxWidth: "70%",
-                }}
-              >
-                {msg.text}
-                {msg.typing && <span className="typing-cursor">|</span>}
-              </motion.div>
-            ))}
-            <div ref={chatEndRef}></div>
+        {/* CENTER: Chat */}
+        <Box flex="1" display="flex" flexDirection="column" p={4} bg="#0e0f13">
+          <Box flex="1" overflowY="auto" mb={3} className="scroll-fade">
+            <motion.div variants={listVariant} initial="hidden" animate="visible">
+              <AnimatePresence initial={false}>
+                {messages.map((m, idx) => (
+                  <motion.div
+                    key={idx}
+                    variants={itemVariant}
+                    exit="exit"
+                    initial={{ opacity: 0, x: m.user ? 100 : -100, scale: 0.9 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  >
+                    <Box
+                      maxWidth="70%"
+                      p={3}
+                      mb={3}
+                      borderRadius="20px"
+                      bg={m.user ? "linear-gradient(135deg,#2a6bff,#0d47a1)" : "#1c1e26"}
+                      color="#fff"
+                      boxShadow={m.user ? "0 6px 20px rgba(45,100,255,0.18)" : "0 4px 15px rgba(0,0,0,0.5)"}
+                      alignSelf={m.user ? "flex-end" : "flex-start"}
+                      style={{ whiteSpace: "pre-wrap", position: "relative" }}
+                    >
+                      <Text fontSize="sm">{m.text}</Text>
+                      {!m.user && m.typing && <TypingDots />}
+                      {!m.user && !m.typing && (
+                        <Tooltip label="Copiar respuesta">
+                          <IconButton
+                            size="sm"
+                            icon={<FiClipboard />}
+                            onClick={() => copyText(m.text)}
+                            position="absolute"
+                            top={2}
+                            right={2}
+                            variant="ghost"
+                          />
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+            <div ref={chatEndRef} />
           </Box>
 
-          {/* Input */}
-          <form onSubmit={handleSend} style={{ display: "flex", gap: "8px" }}>
-            <input
-              type="text"
+          <Box as="form" onSubmit={handleSend} display="flex" gap={3}>
+            <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              disabled={isTyping}
-              placeholder="Escribe tu mensaje..."
-              style={{
-                flex: 1,
-                padding: "12px 16px",
-                borderRadius: "12px 0 0 12px",
-                border: "1px solid #333",
-                background: "#1a1a1a",
-                color: "#fff",
-                outline: "none",
-              }}
+              placeholder={isTyping ? "La IA está escribiendo..." : "Escribe tu pregunta..."}
+              bg="#1c1e26"
+              color="#e9eef5"
+              border="1px solid #2a2d38"
+              borderRadius="lg"
             />
-            <motion.button
-              type="submit"
-              disabled={isTyping}
-              whileHover={{ scale: 1.05, boxShadow: "0 0 10px #4DA6FF" }}
-              whileTap={{ scale: 0.95 }}
-              style={{
-                padding: "0 20px",
-                borderRadius: "0 12px 12px 0",
-                background: "#4DA6FF",
-                color: "#fff",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              Enviar
-            </motion.button>
-          </form>
+            <Button type="submit" colorScheme="blue" isDisabled={isTyping}>Enviar</Button>
+          </Box>
         </Box>
 
-        {/* Info column */}
-        <Box
-          w="220px"
-          bg="#1a1a1a"
-          p={4}
-          borderLeft="1px solid #333"
-          display="flex"
-          flexDirection="column"
-          gap={3}
-        >
-          <Text fontWeight="bold" color="#4DA6FF">
-            Sugerencias
-          </Text>
-          <Text fontSize="sm" color="#ddd">
-            - Haz click en los Easter eggs 🐦🌋🌼
-          </Text>
-          <Text fontSize="sm" color="#ddd">
-            - Pregunta cualquier tema educativo
-          </Text>
-          <Text fontSize="sm" color="#ddd">
-            - La IA te explicará paso a paso
-          </Text>
-          <motion.button
-            onClick={generateSummary}
-            whileHover={{ scale: 1.05, boxShadow: "0 0 10px #4DA6FF" }}
-            whileTap={{ scale: 0.95 }}
-            style={{
-              marginTop: "auto",
-              padding: "8px 12px",
-              background: "#4DA6FF",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer",
-            }}
-          >
-            Generar Resumen
-          </motion.button>
-          {summary && (
-            <Text mt={2} fontSize="sm" color="#ddd">
-              {summary}
-            </Text>
-          )}
+        {/* RIGHT: Resumen */}
+        <Box w="280px" bg="#0c0d11" p={4} borderLeft="1px solid #1c1e26" display="flex" flexDirection="column">
+          <Text fontWeight="600" color="#9bb9ff">Resumen</Text>
+          <Box mt={3} flex="1" overflowY="auto" className="scroll-fade">
+            {summary ? (
+              <Box bg="#1c1e26" p={3} borderRadius="12px" boxShadow="0 2px 8px rgba(0,0,0,0.3)">
+                <Text fontSize="sm" mb={2}>{summary}</Text>
+                <Button size="sm" onClick={() => navigator.clipboard?.writeText(summary)}>Copiar resumen</Button>
+              </Box>
+            ) : (
+              <Box>
+                <Text fontSize="sm" color="#7c89a3">Genera un resumen de la conversación.</Text>
+                <Box mt={3} display="flex" flexDirection="column" gap={2}>
+                  <Button size="sm" onClick={() => generateSummary()}>Generar</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSummary("")}>Borrar</Button>
+                </Box>
+              </Box>
+            )}
+          </Box>
         </Box>
       </Box>
     </Box>
